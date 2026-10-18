@@ -14,10 +14,8 @@ try {
 }
 if (!'https'.equalsIgnoreCase(plannerUri.scheme) || !plannerUri.host
         || plannerUri.userInfo || plannerUri.query || plannerUri.fragment
-        || (plannerUri.path && plannerUri.path != '/')
-        || plannerUri.host.equalsIgnoreCase('ts.net')
-        || plannerUri.host.toLowerCase().endsWith('.ts.net')) {
-    throw new GradleException('PLANNER_PUBLIC_URL must be a public HTTPS URL and cannot be a Tailscale address.')
+        || (plannerUri.path && plannerUri.path != '/')) {
+    throw new GradleException('PLANNER_PUBLIC_URL must be a valid public HTTPS origin.')
 }
 plannerUrl = plannerUri.toString().endsWith('/') ? plannerUri.toString() : plannerUri.toString() + '/'
 

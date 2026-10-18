@@ -95,21 +95,26 @@ rules; existing accounts are marked verified during the one-time migration.
 Task content remains in the SQLite database without application-level
 encryption at rest. Protect the Pi and its database backups accordingly.
 
-For the Pi deployment, Jenkins maps container port 3000 to host port 3001. To
-make the planner public without requiring visitors to install Tailscale, use a
-Cloudflare Tunnel with a domain managed by Cloudflare. Map a hostname such as
-`planner.example.com` to `http://127.0.0.1:3001`; the tunnel requires no inbound
-router port-forwarding. A temporary Quick Tunnel URL is useful for a demo but
-is not a stable production address. See the
-[Cloudflare Tunnel setup guide](https://developers.cloudflare.com/tunnel/get-started/).
+For the Pi deployment, Jenkins maps container port 3000 to host port 3001. This
+Pi already uses Tailscale Funnel to expose that app publicly at
+`https://rpi.tail92d0d8.ts.net:8443`; visitors do not need Tailscale installed.
+Funnel is available on Tailscale's free plan and provides HTTPS without router
+port forwarding. The Funnel configuration must continue proxying port 8443 to
+`http://127.0.0.1:3001`.
 
-Set `APP_BASE_URL` to that public HTTPS URL. For Android builds, add a
+Use `https://rpi.tail92d0d8.ts.net:8443` for `APP_BASE_URL` and for the Jenkins
+Secret text credential `planner-public-url`. For Android builds, add a
 `PLANNER_PUBLIC_URL` repository variable under **Settings → Secrets and
-variables → Actions → Variables** with the public HTTPS origin (for example,
-`https://planner.example.com`). The workflow rejects a missing, non-HTTPS, or
-Tailscale URL, so it cannot publish a tailnet-only APK. After setting the
-variable and pushing these changes, you can run **Build and publish Android
-APK** manually from the Actions tab to publish a fresh APK release.
+variables → Actions → Variables** with the same URL. The APK then calls the
+public app URL, so people who install it do not need Tailscale. After setting
+the variable and pushing any Android build changes, run **Build and publish
+Android APK** manually from the Actions tab to publish a fresh APK release.
+The base address without `:8443` routes to a different service and must not be
+used for the app.
+
+The Funnel status currently also shows the default HTTPS address forwarding
+`/github-webhook/` to Jenkins. Keep the Jenkins UI protected; only the webhook
+endpoint needs public access for GitHub delivery.
 
 ### Resend email setup
 
