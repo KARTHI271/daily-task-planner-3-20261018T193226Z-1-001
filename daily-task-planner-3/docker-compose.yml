@@ -1,0 +1,14 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: daily-task-planner
+    ports:
+      - "3000:3000"
+    volumes:
+      - task-data:/app/backend/data
+    restart: unless-stopped
+
+volumes:
+  task-data:

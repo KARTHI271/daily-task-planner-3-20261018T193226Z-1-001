@@ -1,0 +1,48 @@
+const express = require("express");
+const cors = require("cors");
+const path = require("path");
+
+const tasksRouter = require("./routes/tasks");
+const statsRouter = require("./routes/stats");
+const recurringRouter = require("./routes/recurring");
+const startScheduler = require("./services/scheduler");
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(cors());
+app.use(express.json());
+
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true, service: "daily-task-planner" });
+});
+
+app.use("/api/tasks", tasksRouter);
+app.use("/api/stats", statsRouter);
+app.use("/api/recurring", recurringRouter);
+
+// Serve frontend
+const frontendPath = path.join(__dirname, "../../frontend/public");
+
+app.use(express.static(frontendPath));
+
+app.use((req, res, next) => {
+  if (req.originalUrl.startsWith("/api/")) {
+    return res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
+  }
+
+  res.sendFile(path.join(frontendPath, "index.html"));
+});
+
+app.use((err, req, res, _next) => {
+  console.error("API Error:", err);
+  res.status(500).json({ error: err.message || "Internal Server Error" });
+});
+
+const server = app.listen(PORT, () => {
+  console.log(`Daily Task Planner running on http://localhost:${PORT}`);
+});
+
+startScheduler();
+
+module.exports = server;
