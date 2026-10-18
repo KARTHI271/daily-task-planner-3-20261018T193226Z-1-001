@@ -113,3 +113,25 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 .form-actions .primary-btn { flex: 1; justify-content: center; }
 
 .error-banner { background: #3A2020; border: 1px solid #5C2E2E; color: #F2A0A0; font-size: 13px; padding: 10px 14px; border-radius: 8px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; }
+
+.account-panel { margin-top: 18px; padding: 12px; background: #14171C; border: 1px solid #262B35; border-radius: 8px; }
+.account-email { color: #D1D5DB; font-size: 12px; overflow-wrap: anywhere; }
+.account-action, .auth-switch { color: #F2C94C; font-size: 13px; padding: 8px 0 0; }
+.download-app-btn { display: flex; justify-content: center; text-align: center; margin-top: 10px; padding: 10px 12px; background: #262B35; border: 1px solid #3A4150; border-radius: 8px; color: #F4F2ED; text-decoration: none; font-size: 13px; font-weight: 600; }
+.download-app-btn:hover { border-color: #F2C94C; color: #F2C94C; }
+.auth-page { width: 100%; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: #14171C; }
+.auth-card { width: min(100%, 420px); padding: 30px; background: #1C2028; border: 1px solid #262B35; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+.auth-brand { font-size: 18px; font-weight: 700; }
+.auth-brand span { color: #F2C94C; }
+.auth-title { margin: 24px 0 6px; font-size: 24px; }
+.auth-copy, .auth-hint { color: #8B93A1; font-size: 13px; line-height: 1.5; }
+.auth-hint { margin: 8px 0 0; }
+.auth-submit { width: 100%; justify-content: center; margin-top: 22px; }
+.auth-switch { display: block; margin: 0 auto; padding: 16px 0 4px; background: transparent; }
+.auth-download { margin-top: 16px; }
+
+@media (max-width: 640px) {
+  .auth-card { padding: 24px 20px; }
+  .sidebar { width: 184px; padding: 20px 12px; }
+  .main { padding: 24px 18px; }
+}

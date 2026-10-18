@@ -3,6 +3,7 @@ const CATEGORIES = ["SRE", "AWS", "GCP", "Linux", "DevOps", "AI", "Documentation
 const STATUSES = ["Pending", "In Progress", "Completed", "Cancelled"];
 const PRIORITY_COLOR = { High: "#F2994A", Medium: "#F2C94C", Low: "#6FCF97" };
 const API = "/api";
+const APK_DOWNLOAD_URL = "https://github.com/KARTHI271/daily-task-planner-3-20261018T193226Z-1-001/releases/download/android-latest/DailyTaskPlanner.apk";
 
 const pad = (n) => String(n).padStart(2, "0");
 const toKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -31,6 +32,9 @@ let state = {
   expandedTasks: new Set(),
   activeSnoozeTaskId: null,
 };
+let currentUser = null;
+let authMode = "login";
+let authMessage = "";
 
 async function api(path, opts = {}) {
   const res = await fetch(API + path, {
@@ -38,6 +42,7 @@ async function api(path, opts = {}) {
     ...opts,
   });
   if (!res.ok && res.status !== 204) {
+    if (res.status === 401 && !path.startsWith("/auth/")) currentUser = null;
     let msg = "Request failed";
     try { msg = (await res.json()).error || msg; } catch {}
     throw new Error(msg);
@@ -280,6 +285,17 @@ function renderSidebar() {
   return el("aside", { class: "sidebar" }, [
     el("div", {}, [
       el("div", { class: "logo" }, [el("span", {}, "$"), " planner"]),
+      el("div", { class: "account-panel" }, [
+        el("div", { class: "account-email" }, currentUser.email),
+        el("button", { class: "account-action", onclick: async () => {
+          await api("/auth/logout", { method: "POST" });
+          currentUser = null;
+          state.dayTasks = [];
+          state.overdueTasks = [];
+          render();
+        } }, "Sign out"),
+      ]),
+      el("a", { class: "download-app-btn", href: APK_DOWNLOAD_URL }, "Download Android app"),
       nav,
     ]),
     el("div", { class: "sidebar-stats" }, [
@@ -292,6 +308,51 @@ function renderSidebar() {
       el("div", { class: "mono", style: "font-size:13px;color:#6B7280;margin-top:8px" }, `${completed}/${state.dayTasks.length} tasks`),
     ]),
   ]);
+}
+
+function renderAuth() {
+  let submit;
+  const email = el("input", { class: "field-input", type: "email", name: "email", autocomplete: "email", required: "required", maxlength: "254", placeholder: "you@example.com" });
+  const password = el("input", {
+    class: "field-input", type: "password", name: "password", required: "required",
+    minlength: authMode === "register" ? "12" : undefined, maxlength: "128",
+    autocomplete: authMode === "register" ? "new-password" : "current-password",
+    placeholder: authMode === "register" ? "At least 12 characters" : "Your password"
+  });
+  const form = el("form", { class: "auth-card", onsubmit: async (event) => {
+    event.preventDefault();
+    authMessage = "";
+    submit.disabled = true;
+    try {
+      const result = await api(`/auth/${authMode === "register" ? "register" : "login"}`, {
+        method: "POST", body: JSON.stringify({ email: email.value, password: password.value })
+      });
+      currentUser = result.user;
+      password.value = "";
+      await loadDay();
+    } catch (error) {
+      authMessage = error.message;
+      render();
+    } finally {
+      submit.disabled = false;
+    }
+  } }, [
+    el("div", { class: "auth-brand" }, [el("span", {}, "$"), " planner"]),
+    el("h1", { class: "auth-title" }, authMode === "register" ? "Create your account" : "Welcome back"),
+    el("p", { class: "auth-copy" }, "Your tasks are private to your account and sync with this server."),
+    authMessage ? el("div", { class: "error-banner" }, authMessage) : null,
+    el("label", { class: "field-label" }, "Email"), email,
+    el("label", { class: "field-label" }, "Password"), password,
+    authMode === "register" ? el("p", { class: "auth-hint" }, "Use at least 12 characters. Passwords are stored as salted Argon2id hashes, never as readable text.") : null,
+    submit = el("button", { class: "primary-btn auth-submit", type: "submit" }, authMode === "register" ? "Create account" : "Sign in"),
+    el("button", { class: "auth-switch", type: "button", onclick: () => {
+      authMode = authMode === "register" ? "login" : "register";
+      authMessage = "";
+      render();
+    } }, authMode === "register" ? "Already have an account? Sign in" : "New here? Create an account"),
+    el("a", { class: "download-app-btn auth-download", href: APK_DOWNLOAD_URL }, "Download Android app"),
+  ]);
+  return el("div", { class: "auth-page" }, form);
 }
 
 function taskRow(t, isOverdue = false) {
@@ -722,6 +783,11 @@ async function render() {
   const app = document.getElementById("app");
   app.innerHTML = "";
 
+  if (!currentUser) {
+    app.appendChild(renderAuth());
+    return;
+  }
+
   const main = el("main", { class: "main" });
   if (state.error) {
     main.appendChild(el("div", { class: "error-banner" }, [
@@ -739,4 +805,15 @@ async function render() {
   if (state.showForm) app.appendChild(renderForm());
 }
 
-loadDay();
+async function initialize() {
+  try {
+    const result = await api("/auth/me");
+    currentUser = result.user;
+    await loadDay();
+  } catch {
+    currentUser = null;
+    render();
+  }
+}
+
+initialize();

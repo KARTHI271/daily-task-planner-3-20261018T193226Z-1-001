@@ -73,7 +73,7 @@ pipeline {
             steps {
                 sh '''
                     for attempt in $(seq 1 30); do
-                      if curl --fail --silent "http://localhost:$APP_PORT/health"; then
+                      if curl --fail --silent "http://localhost:$APP_PORT/api/health"; then
                         echo
                         exit 0
                       fi

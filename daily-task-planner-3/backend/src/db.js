@@ -13,6 +13,7 @@ db.pragma("journal_mode = WAL");
 db.exec(`
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,
+  user_id TEXT,
   recurring_id TEXT,
   title TEXT NOT NULL,
   description TEXT DEFAULT '',
@@ -32,6 +33,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 CREATE TABLE IF NOT EXISTS recurring_tasks (
   id TEXT PRIMARY KEY,
+  user_id TEXT,
   title TEXT NOT NULL,
   description TEXT DEFAULT '',
   start_time TEXT DEFAULT '',
@@ -42,6 +44,20 @@ CREATE TABLE IF NOT EXISTS recurring_tasks (
   enabled INTEGER NOT NULL DEFAULT 1,
   subtasks TEXT DEFAULT '[]',
   reminder_time TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
 );
 `);
 
@@ -56,9 +72,17 @@ function addColumnIfNotExists(table, column, def) {
 addColumnIfNotExists("tasks", "subtasks", "TEXT DEFAULT '[]'");
 addColumnIfNotExists("tasks", "reminder_time", "TEXT DEFAULT ''");
 addColumnIfNotExists("tasks", "snoozed_until", "TEXT DEFAULT ''");
+addColumnIfNotExists("tasks", "user_id", "TEXT");
 
 addColumnIfNotExists("recurring_tasks", "subtasks", "TEXT DEFAULT '[]'");
 addColumnIfNotExists("recurring_tasks", "reminder_time", "TEXT DEFAULT ''");
+addColumnIfNotExists("recurring_tasks", "user_id", "TEXT");
+
+db.exec(`
+CREATE INDEX IF NOT EXISTS idx_tasks_user_date ON tasks(user_id, date);
+CREATE INDEX IF NOT EXISTS idx_recurring_user_date ON recurring_tasks(user_id, start_date);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_expiry ON auth_sessions(user_id, expires_at);
+`);
 
 module.exports = db;
 

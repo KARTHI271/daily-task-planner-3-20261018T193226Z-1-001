@@ -22,14 +22,16 @@ function shouldRun(rec, date) {
   return false;
 }
 
-function generateForDate(date = new Date()) {
+function generateForDate(date = new Date(), onlyUserId = null) {
   const dateKey = keyFromDate(date);
-  const recurring = db.prepare("SELECT * FROM recurring_tasks WHERE enabled=1").all();
+  const recurring = onlyUserId
+    ? db.prepare("SELECT * FROM recurring_tasks WHERE enabled=1 AND user_id=?").all(onlyUserId)
+    : db.prepare("SELECT * FROM recurring_tasks WHERE enabled=1").all();
   const insert = db.prepare(`
     INSERT INTO tasks
-    (id, recurring_id, title, description, date, start_time, priority, category,
+    (id, user_id, recurring_id, title, description, date, start_time, priority, category,
      status, notes, subtasks, reminder_time, created_at, updated_at, completed_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `);
 
   const create = db.transaction(() => {
@@ -38,15 +40,15 @@ function generateForDate(date = new Date()) {
       if (!shouldRun(r, date)) continue;
 
       const exists = db.prepare(
-        "SELECT 1 FROM tasks WHERE recurring_id=? AND date=?"
-      ).get(r.id, dateKey);
+        "SELECT 1 FROM tasks WHERE recurring_id=? AND date=? AND user_id=?"
+      ).get(r.id, dateKey, r.user_id);
 
       if (exists) continue;
 
       const timestamp = new Date().toISOString();
       insert.run(
         `${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`,
-        r.id, r.title, r.description || "", dateKey, r.start_time || "",
+        r.user_id, r.id, r.title, r.description || "", dateKey, r.start_time || "",
         r.priority, r.category, "Pending", "", r.subtasks || "[]", r.reminder_time || "",
         timestamp, timestamp, null
       );

@@ -1,22 +1,28 @@
 const express = require("express");
-const cors = require("cors");
 const path = require("path");
 
+const authRouter = require("./routes/auth");
 const tasksRouter = require("./routes/tasks");
 const statsRouter = require("./routes/stats");
 const recurringRouter = require("./routes/recurring");
+const { requireAuth } = require("./auth");
 const startScheduler = require("./services/scheduler");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "32kb" }));
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "daily-task-planner" });
 });
 
+app.use("/api/auth", authRouter);
+app.use("/api", requireAuth);
 app.use("/api/tasks", tasksRouter);
 app.use("/api/stats", statsRouter);
 app.use("/api/recurring", recurringRouter);
@@ -36,7 +42,7 @@ app.use((req, res, next) => {
 
 app.use((err, req, res, _next) => {
   console.error("API Error:", err);
-  res.status(500).json({ error: err.message || "Internal Server Error" });
+  res.status(500).json({ error: "Internal Server Error" });
 });
 
 const server = app.listen(PORT, () => {

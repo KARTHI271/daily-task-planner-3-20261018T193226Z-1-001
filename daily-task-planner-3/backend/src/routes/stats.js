@@ -16,8 +16,8 @@ function rangeStat(tasks) {
   return { total, done, pct: total ? Math.round((done / total) * 100) : 0 };
 }
 
-router.get("/", (_req, res) => {
-  const tasks = db.prepare("SELECT * FROM tasks ORDER BY date").all();
+router.get("/", (req, res) => {
+  const tasks = db.prepare("SELECT * FROM tasks WHERE user_id = ? ORDER BY date").all(req.user.id);
   const now = new Date();
 
   const weekFrom = new Date(now);

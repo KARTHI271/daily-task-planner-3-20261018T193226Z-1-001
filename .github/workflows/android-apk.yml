@@ -1,0 +1,46 @@
+name: Build and publish Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'daily-task-planner-3/android/**'
+      - 'daily-task-planner-3/frontend/public/**'
+      - '.github/workflows/android-apk.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        run: |
+          gradle --no-daemon --project-dir daily-task-planner-3/android :app:assembleDebug
+          cp daily-task-planner-3/android/app/build/outputs/apk/debug/app-debug.apk DailyTaskPlanner.apk
+
+      - name: Publish latest APK download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          name: Daily Task Planner for Android (latest)
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          files: DailyTaskPlanner.apk

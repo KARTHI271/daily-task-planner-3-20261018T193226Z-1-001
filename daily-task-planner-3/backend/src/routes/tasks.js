@@ -19,14 +19,14 @@ router.get("/", (req, res) => {
   if (date) {
     try {
       const [y, m, d] = date.split("-").map(Number);
-      if (y && m && d) generateForDate(new Date(y, m - 1, d));
+      if (y && m && d) generateForDate(new Date(y, m - 1, d), req.user.id);
     } catch (e) {
       console.error("Error generating tasks for date:", e);
     }
   }
 
-  let sql = "SELECT * FROM tasks WHERE 1=1";
-  const params = {};
+  let sql = "SELECT * FROM tasks WHERE user_id = @userId";
+  const params = { userId: req.user.id };
 
   if (overdue === "true") {
     sql += " AND date < @today AND status NOT IN ('Completed', 'Cancelled')";
@@ -64,7 +64,7 @@ router.get("/", (req, res) => {
 });
 
 router.post("/:id/snooze", (req, res) => {
-  const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id);
+  const task = db.prepare("SELECT * FROM tasks WHERE id = ? AND user_id = ?").get(req.params.id, req.user.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
 
   const { minutes = 15, until } = req.body;
@@ -76,21 +76,21 @@ router.post("/:id/snooze", (req, res) => {
     snoozedUntil = new Date(Date.now() + minutes * 60 * 1000).toISOString();
   }
 
-  db.prepare("UPDATE tasks SET snoozed_until = ?, updated_at = ? WHERE id = ?")
-    .run(snoozedUntil, now(), task.id);
+  db.prepare("UPDATE tasks SET snoozed_until = ?, updated_at = ? WHERE id = ? AND user_id = ?")
+    .run(snoozedUntil, now(), task.id, req.user.id);
 
-  res.json(db.prepare("SELECT * FROM tasks WHERE id = ?").get(task.id));
+  res.json(db.prepare("SELECT * FROM tasks WHERE id = ? AND user_id = ?").get(task.id, req.user.id));
 });
 
 router.post("/:id/reschedule", (req, res) => {
-  const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id);
+  const task = db.prepare("SELECT * FROM tasks WHERE id = ? AND user_id = ?").get(req.params.id, req.user.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
 
   const targetDate = req.body.date || todayKey();
-  db.prepare("UPDATE tasks SET date = ?, updated_at = ? WHERE id = ?")
-    .run(targetDate, now(), task.id);
+  db.prepare("UPDATE tasks SET date = ?, updated_at = ? WHERE id = ? AND user_id = ?")
+    .run(targetDate, now(), task.id, req.user.id);
 
-  res.json(db.prepare("SELECT * FROM tasks WHERE id = ?").get(task.id));
+  res.json(db.prepare("SELECT * FROM tasks WHERE id = ? AND user_id = ?").get(task.id, req.user.id));
 });
 
 router.post("/", (req, res) => {
@@ -119,20 +119,20 @@ router.post("/", (req, res) => {
 
   db.prepare(`
     INSERT INTO tasks
-    (id, recurring_id, title, description, date, start_time, priority, category,
+    (id, user_id, recurring_id, title, description, date, start_time, priority, category,
      status, notes, subtasks, reminder_time, snoozed_until, created_at, updated_at, completed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    id, recurringId, title.trim(), description, date, startTime, priority, category,
+    id, req.user.id, recurringId, title.trim(), description, date, startTime, priority, category,
     status, notes, subtasksJson, reminderTime, snoozedUntil, timestamp, timestamp,
     status === "Completed" ? timestamp : null
   );
 
-  res.status(201).json(db.prepare("SELECT * FROM tasks WHERE id = ?").get(id));
+  res.status(201).json(db.prepare("SELECT * FROM tasks WHERE id = ? AND user_id = ?").get(id, req.user.id));
 });
 
 router.put("/:id", (req, res) => {
-  const existing = db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id);
+  const existing = db.prepare("SELECT * FROM tasks WHERE id = ? AND user_id = ?").get(req.params.id, req.user.id);
   if (!existing) return res.status(404).json({ error: "Task not found" });
 
   const next = { ...existing, ...req.body };
@@ -151,7 +151,7 @@ router.put("/:id", (req, res) => {
       recurring_id=?, title=?, description=?, date=?, start_time=?, priority=?, category=?,
       status=?, notes=?, subtasks=?, reminder_time=?, snoozed_until=?,
       updated_at=?, completed_at=?
-    WHERE id=?
+    WHERE id=? AND user_id=?
   `).run(
     next.recurringId ?? existing.recurring_id,
     next.title,
@@ -167,34 +167,36 @@ router.put("/:id", (req, res) => {
     next.snoozedUntil ?? next.snoozed_until ?? "",
     now(),
     completedAt,
-    existing.id
+    existing.id,
+    req.user.id
   );
 
-  res.json(db.prepare("SELECT * FROM tasks WHERE id = ?").get(existing.id));
+  res.json(db.prepare("SELECT * FROM tasks WHERE id = ? AND user_id = ?").get(existing.id, req.user.id));
 });
 
 router.patch("/:id/status", (req, res) => {
   const order = ["Pending", "In Progress", "Completed", "Cancelled"];
-  const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id);
+  const task = db.prepare("SELECT * FROM tasks WHERE id = ? AND user_id = ?").get(req.params.id, req.user.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
 
   const status = req.body.status || order[(order.indexOf(task.status) + 1) % order.length];
   const timestamp = now();
 
   db.prepare(`
-    UPDATE tasks SET status=?, completed_at=?, updated_at=? WHERE id=?
+    UPDATE tasks SET status=?, completed_at=?, updated_at=? WHERE id=? AND user_id=?
   `).run(
     status,
     status === "Completed" ? timestamp : null,
     timestamp,
-    task.id
+    task.id,
+    req.user.id
   );
 
-  res.json(db.prepare("SELECT * FROM tasks WHERE id = ?").get(task.id));
+  res.json(db.prepare("SELECT * FROM tasks WHERE id = ? AND user_id = ?").get(task.id, req.user.id));
 });
 
 router.delete("/:id", (req, res) => {
-  const result = db.prepare("DELETE FROM tasks WHERE id = ?").run(req.params.id);
+  const result = db.prepare("DELETE FROM tasks WHERE id = ? AND user_id = ?").run(req.params.id, req.user.id);
   if (!result.changes) return res.status(404).json({ error: "Task not found" });
   res.status(204).end();
 });
