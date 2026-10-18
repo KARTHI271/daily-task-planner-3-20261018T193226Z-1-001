@@ -54,15 +54,23 @@ pipeline {
                     credentialsId: 'dockerhub-creds',
                     usernameVariable: 'DOCKERHUB_USER',
                     passwordVariable: 'DOCKERHUB_TOKEN'
-                )]) {
+                ),
+                string(credentialsId: 'resend-api-key', variable: 'RESEND_API_KEY'),
+                string(credentialsId: 'planner-email-from', variable: 'EMAIL_FROM'),
+                string(credentialsId: 'planner-public-url', variable: 'APP_BASE_URL')]) {
                     sh '''
+                        set +x
                         IMAGE_REF="$DOCKERHUB_USER/$DOCKERHUB_REPO:$BUILD_NUMBER"
                         docker rm -f "$APP_CONTAINER" 2>/dev/null || true
                         docker run -d \
                           --name "$APP_CONTAINER" \
                           --restart unless-stopped \
-                          -p "$APP_PORT:3000" \
+                          -p "127.0.0.1:$APP_PORT:3000" \
                           -v "$APP_VOLUME:/app/backend/data" \
+                          -e RESEND_API_KEY \
+                          -e EMAIL_FROM \
+                          -e APP_BASE_URL \
+                          -e TRUST_CF_CONNECTING_IP=true \
                           "$IMAGE_REF"
                     '''
                 }

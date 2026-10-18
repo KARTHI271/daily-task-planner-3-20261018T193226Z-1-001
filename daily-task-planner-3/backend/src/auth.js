@@ -57,7 +57,8 @@ function requireAuth(req, res, next) {
   if (!token) return res.status(401).json({ error: "Please sign in to continue" });
 
   const session = db.prepare(`
-    SELECT users.id, users.email
+    SELECT users.id, users.email, users.email_verified_at,
+      users.email_reminders_enabled, users.timezone
     FROM auth_sessions JOIN users ON users.id = auth_sessions.user_id
     WHERE auth_sessions.token_hash = ? AND auth_sessions.expires_at > ?
   `).get(tokenHash(token), new Date().toISOString());
@@ -65,7 +66,13 @@ function requireAuth(req, res, next) {
     clearSessionCookie(res);
     return res.status(401).json({ error: "Your session expired. Please sign in again." });
   }
-  req.user = session;
+  req.user = {
+    id: session.id,
+    email: session.email,
+    emailVerified: !!session.email_verified_at,
+    emailRemindersEnabled: !!session.email_reminders_enabled,
+    timezone: session.timezone,
+  };
   req.sessionTokenHash = tokenHash(token);
   next();
 }

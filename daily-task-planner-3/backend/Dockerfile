@@ -12,7 +12,7 @@ RUN apt-get update \
 
 # Install backend dependencies
 COPY backend/package*.json ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
 # Copy backend source
 COPY backend/src ./src

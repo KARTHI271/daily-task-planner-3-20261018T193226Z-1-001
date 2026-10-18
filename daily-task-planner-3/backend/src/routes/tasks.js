@@ -4,6 +4,26 @@ const { generateForDate } = require("../services/scheduler");
 
 const router = express.Router();
 const now = () => new Date().toISOString();
+const PRIORITIES = ["High", "Medium", "Low"];
+const STATUSES = ["Pending", "In Progress", "Completed", "Cancelled"];
+const CATEGORIES = ["SRE", "AWS", "GCP", "Linux", "DevOps", "AI", "Documentation", "Personal", "Other"];
+
+function validDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function validTime(value) {
+  return typeof value === "string" && (value === "" || /^([01]\d|2[0-3]):[0-5]\d$/.test(value));
+}
+
+function validSubtasks(value) {
+  return Array.isArray(value) && value.length <= 100 && value.every((item) =>
+    item && typeof item === "object" && typeof item.title === "string" && item.title.trim().length > 0
+      && item.title.length <= 200 && (item.completed === undefined || typeof item.completed === "boolean")
+  );
+}
 
 function todayKey() {
   const d = new Date();
@@ -15,6 +35,13 @@ function todayKey() {
 
 router.get("/", (req, res) => {
   const { date, from, to, status, category, priority, search, overdue, sortBy, sortOrder = "asc" } = req.query;
+
+  if ((date && !validDate(date)) || (from && !validDate(from)) || (to && !validDate(to))
+      || (from && to && from > to) || (status && !STATUSES.includes(status))
+      || (category && !CATEGORIES.includes(category)) || (priority && !PRIORITIES.includes(priority))
+      || (search && (typeof search !== "string" || search.length > 200))) {
+    return res.status(400).json({ error: "One or more task filters are invalid." });
+  }
 
   if (date) {
     try {
@@ -46,7 +73,7 @@ router.get("/", (req, res) => {
     params.search = `%${search}%`;
   }
 
-  const dir = sortOrder.toLowerCase() === "desc" ? "DESC" : "ASC";
+  const dir = sortOrder === "desc" ? "DESC" : "ASC";
   if (sortBy === "date") {
     sql += ` ORDER BY date ${dir}, CASE WHEN start_time = '' THEN 1 ELSE 0 END, start_time ${dir}`;
   } else if (sortBy === "title") {
@@ -67,12 +94,19 @@ router.post("/:id/snooze", (req, res) => {
   const task = db.prepare("SELECT * FROM tasks WHERE id = ? AND user_id = ?").get(req.params.id, req.user.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
 
-  const { minutes = 15, until } = req.body;
+  const { minutes = 15, until } = req.body || {};
   let snoozedUntil;
 
   if (until) {
-    snoozedUntil = new Date(until).toISOString();
+    const parsedUntil = new Date(until);
+    if (Number.isNaN(parsedUntil.getTime()) || parsedUntil <= new Date()) {
+      return res.status(400).json({ error: "Snooze time must be a valid future date." });
+    }
+    snoozedUntil = parsedUntil.toISOString();
   } else {
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
+      return res.status(400).json({ error: "Snooze duration must be between 1 and 1440 minutes." });
+    }
     snoozedUntil = new Date(Date.now() + minutes * 60 * 1000).toISOString();
   }
 
@@ -86,8 +120,9 @@ router.post("/:id/reschedule", (req, res) => {
   const task = db.prepare("SELECT * FROM tasks WHERE id = ? AND user_id = ?").get(req.params.id, req.user.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
 
-  const targetDate = req.body.date || todayKey();
-  db.prepare("UPDATE tasks SET date = ?, updated_at = ? WHERE id = ? AND user_id = ?")
+  const targetDate = req.body?.date || todayKey();
+  if (!validDate(targetDate)) return res.status(400).json({ error: "Enter a valid date in YYYY-MM-DD format." });
+  db.prepare("UPDATE tasks SET date = ?, updated_at = ?, last_reminder_sent_for = NULL WHERE id = ? AND user_id = ?")
     .run(targetDate, now(), task.id, req.user.id);
 
   res.json(db.prepare("SELECT * FROM tasks WHERE id = ? AND user_id = ?").get(task.id, req.user.id));
@@ -110,8 +145,16 @@ router.post("/", (req, res) => {
     snoozedUntil = ""
   } = req.body;
 
-  if (!title?.trim() || !date) {
+  if (typeof title !== "string" || !title.trim() || title.length > 200 || !validDate(date)) {
     return res.status(400).json({ error: "title and date are required" });
+  }
+  if (typeof description !== "string" || description.length > 5000
+      || typeof notes !== "string" || notes.length > 5000
+      || !validTime(startTime) || !validTime(reminderTime)
+      || !PRIORITIES.includes(priority) || !CATEGORIES.includes(category) || !STATUSES.includes(status)
+      || !Array.isArray(subtasks) || subtasks.length > 100
+      || subtasks.some((item) => !item || typeof item.title !== "string" || !item.title.trim() || item.title.length > 200)) {
+    return res.status(400).json({ error: "One or more task fields are invalid." });
   }
 
   const timestamp = now();
@@ -136,37 +179,58 @@ router.put("/:id", (req, res) => {
   if (!existing) return res.status(404).json({ error: "Task not found" });
 
   const next = { ...existing, ...req.body };
+  const nextTitle = next.title;
+  const nextDate = next.date;
+  const nextDescription = next.description ?? "";
+  const nextNotes = next.notes ?? "";
+  const nextStartTime = next.startTime ?? existing.start_time ?? "";
+  const nextReminderTime = next.reminderTime ?? next.reminder_time ?? "";
+  let nextSubtasks = req.body.subtasks === undefined ? existing.subtasks || "[]" : req.body.subtasks;
+  try { if (typeof nextSubtasks === "string") nextSubtasks = JSON.parse(nextSubtasks); } catch { nextSubtasks = null; }
+  let nextSnoozedUntil = next.snoozedUntil ?? next.snoozed_until ?? "";
+  if (nextSnoozedUntil !== "") {
+    const parsedSnooze = new Date(nextSnoozedUntil);
+    nextSnoozedUntil = Number.isNaN(parsedSnooze.getTime()) ? null : parsedSnooze.toISOString();
+  }
+  if (typeof nextTitle !== "string" || !nextTitle.trim() || nextTitle.length > 200 || !validDate(nextDate)
+      || typeof nextDescription !== "string" || nextDescription.length > 5000
+      || typeof nextNotes !== "string" || nextNotes.length > 5000
+      || !validTime(nextStartTime) || !validTime(nextReminderTime)
+      || !PRIORITIES.includes(next.priority) || !CATEGORIES.includes(next.category) || !STATUSES.includes(next.status)
+      || !validSubtasks(nextSubtasks) || nextSnoozedUntil === null) {
+    return res.status(400).json({ error: "One or more task fields are invalid." });
+  }
   const completedAt =
     next.status === "Completed"
       ? (existing.status === "Completed" ? existing.completed_at : now())
       : null;
 
-  const subtasksJson =
-    req.body.subtasks !== undefined
-      ? (typeof req.body.subtasks === "string" ? req.body.subtasks : JSON.stringify(req.body.subtasks))
-      : existing.subtasks || "[]";
+  const subtasksJson = JSON.stringify(nextSubtasks);
 
   db.prepare(`
     UPDATE tasks SET
       recurring_id=?, title=?, description=?, date=?, start_time=?, priority=?, category=?,
       status=?, notes=?, subtasks=?, reminder_time=?, snoozed_until=?,
-      updated_at=?, completed_at=?
+      updated_at=?, completed_at=?,
+      last_reminder_sent_for=CASE WHEN date != ? OR reminder_time != ? THEN NULL ELSE last_reminder_sent_for END
     WHERE id=? AND user_id=?
   `).run(
     next.recurringId ?? existing.recurring_id,
-    next.title,
-    next.description ?? "",
-    next.date,
-    next.startTime ?? existing.start_time ?? "",
+    nextTitle.trim(),
+    nextDescription,
+    nextDate,
+    nextStartTime,
     next.priority,
     next.category,
     next.status,
-    next.notes ?? "",
+    nextNotes,
     subtasksJson,
-    next.reminderTime ?? next.reminder_time ?? "",
-    next.snoozedUntil ?? next.snoozed_until ?? "",
+    nextReminderTime,
+    nextSnoozedUntil,
     now(),
     completedAt,
+    nextDate,
+    nextReminderTime,
     existing.id,
     req.user.id
   );
@@ -179,7 +243,8 @@ router.patch("/:id/status", (req, res) => {
   const task = db.prepare("SELECT * FROM tasks WHERE id = ? AND user_id = ?").get(req.params.id, req.user.id);
   if (!task) return res.status(404).json({ error: "Task not found" });
 
-  const status = req.body.status || order[(order.indexOf(task.status) + 1) % order.length];
+  const status = req.body?.status || order[(order.indexOf(task.status) + 1) % order.length];
+  if (!order.includes(status)) return res.status(400).json({ error: "Invalid task status." });
   const timestamp = now();
 
   db.prepare(`

@@ -1,55 +1,42 @@
-# Daily Task Planner — Split Backend
+# Daily Task Planner backend
 
-This folder separates the backend responsibilities into:
+Express serves both the API and the static frontend. The app uses SQLite in
+`backend/data/tasks.db`; Docker deployments should keep that directory on a
+persistent volume.
 
-```text
-backend/
-├── db.js
-├── server.js
-├── recurring.js
-├── routes/
-│   ├── tasks.js
-│   ├── stats.js
-│   └── recurring.js
-└── services/
-    ├── notifications.js
-    └── scheduler.js
-```
-
-## Setup
+## Local setup
 
 ```bash
-cd backend
 npm install
 npm start
 ```
 
-The API listens on `http://localhost:4096`.
+The server listens on `http://localhost:3000` by default. Set `PORT` to change
+the port.
 
-## API
+## Email configuration
+
+Registration verification, password reset, and opt-in task reminders use the
+Resend email API. Configure these environment variables in the runtime:
+
+- `RESEND_API_KEY`: Resend API key; keep it out of Git.
+- `EMAIL_FROM`: sender address on a domain verified in Resend.
+- `APP_BASE_URL`: public HTTPS origin used to create verification and reset
+  links (for example, `https://planner.example.com`).
+
+Email reminders are disabled by default. A verified account can enable them in
+the app sidebar. Reminder delivery uses the account's IANA time zone and sends
+each reminder once for its scheduled time.
+
+## Main endpoints
 
 - `GET /api/health`
+- `POST /api/auth/register`, `/login`, `/verify-email`
+- `POST /api/auth/forgot-password`, `/reset-password`
+- `GET /api/auth/me`, `PUT /api/auth/preferences`, `POST /api/auth/logout`
 - `GET/POST /api/tasks`
 - `PUT/DELETE /api/tasks/:id`
-- `PATCH /api/tasks/:id/status`
 - `GET /api/stats`
 - `GET/POST /api/recurring`
 - `PUT/DELETE /api/recurring/:id`
 - `PATCH /api/recurring/:id/toggle`
-
-The SQLite database is created automatically as `tasks.db`.
-
-## Frontend integration
-
-The uploaded React file currently stores tasks and recurring tasks in
-`window.storage`. The split backend is therefore a backend replacement/API
-layer; the React frontend will need its persistence calls changed from
-`window.storage.get/set` to HTTP requests against `/api/tasks`,
-`/api/recurring`, and `/api/stats`.
-
-The recurring behavior mirrors the uploaded frontend: daily, weekly
-(same weekday as the start date), and monthly (same date) instances are
-created only when an instance for that recurring task/date does not already
-exist.
-
-`services/notifications.js` provides the Linux `notify-send` integration.

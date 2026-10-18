@@ -2,10 +2,10 @@
   "name": "daily-task-planner-backend",
   "version": "1.0.0",
   "private": true,
-  "main": "server.js",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
   },
   "dependencies": {
     "argon2": "0.45.1",

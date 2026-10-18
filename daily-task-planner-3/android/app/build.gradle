@@ -2,6 +2,25 @@ plugins {
     id 'com.android.application'
 }
 
+def plannerUrl = (project.findProperty('plannerUrl') ?: System.getenv('PLANNER_PUBLIC_URL') ?: '').toString().trim()
+if (!plannerUrl) {
+    throw new GradleException('Set PLANNER_PUBLIC_URL (or pass -PplannerUrl=...) to the public HTTPS planner URL before building the Android app.')
+}
+def plannerUri
+try {
+    plannerUri = new java.net.URI(plannerUrl)
+} catch (Exception ignored) {
+    throw new GradleException('PLANNER_PUBLIC_URL must be a valid public HTTPS origin.')
+}
+if (!'https'.equalsIgnoreCase(plannerUri.scheme) || !plannerUri.host
+        || plannerUri.userInfo || plannerUri.query || plannerUri.fragment
+        || (plannerUri.path && plannerUri.path != '/')
+        || plannerUri.host.equalsIgnoreCase('ts.net')
+        || plannerUri.host.toLowerCase().endsWith('.ts.net')) {
+    throw new GradleException('PLANNER_PUBLIC_URL must be a public HTTPS URL and cannot be a Tailscale address.')
+}
+plannerUrl = plannerUri.toString().endsWith('/') ? plannerUri.toString() : plannerUri.toString() + '/'
+
 android {
     namespace 'com.karthi.dailyplanner'
     compileSdk 35
@@ -16,6 +35,6 @@ android {
         targetSdk 35
         versionCode 1
         versionName '1.0.0'
-        buildConfigField 'String', 'PLANNER_URL', '"https://rpi.tail92d0d8.ts.net:8443/"'
+        buildConfigField 'String', 'PLANNER_URL', '"' + plannerUrl + '"'
     }
 }

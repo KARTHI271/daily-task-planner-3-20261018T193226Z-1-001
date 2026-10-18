@@ -3,7 +3,7 @@ const CATEGORIES = ["SRE", "AWS", "GCP", "Linux", "DevOps", "AI", "Documentation
 const STATUSES = ["Pending", "In Progress", "Completed", "Cancelled"];
 const PRIORITY_COLOR = { High: "#F2994A", Medium: "#F2C94C", Low: "#6FCF97" };
 const API = "/api";
-const APK_DOWNLOAD_URL = "https://github.com/KARTHI271/daily-task-planner-3-20261018T193226Z-1-001/releases/download/android-latest/DailyTaskPlanner.apk";
+const APK_DOWNLOAD_URL = "https://github.com/KARTHI271/daily-task-planner-3-20261018T193226Z-1-001/releases/download/android-public-latest/DailyTaskPlanner.apk";
 
 const pad = (n) => String(n).padStart(2, "0");
 const toKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -35,6 +35,8 @@ let state = {
 let currentUser = null;
 let authMode = "login";
 let authMessage = "";
+let authMessageIsError = false;
+let passwordResetToken = "";
 
 async function api(path, opts = {}) {
   const res = await fetch(API + path, {
@@ -295,6 +297,30 @@ function renderSidebar() {
           render();
         } }, "Sign out"),
       ]),
+      el("label", { class: "email-reminder-setting", style: "display:flex;align-items:center;gap:8px;font-size:12px;color:#8B93A1;margin:12px 0" }, [
+        el("input", {
+          type: "checkbox",
+          checked: currentUser.emailRemindersEnabled,
+          disabled: !currentUser.emailVerified,
+          onchange: async (event) => {
+            try {
+              const result = await api("/auth/preferences", {
+                method: "PUT",
+                body: JSON.stringify({
+                  emailRemindersEnabled: event.target.checked,
+                  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+                }),
+              });
+              currentUser.emailRemindersEnabled = result.emailRemindersEnabled;
+              currentUser.timezone = result.timezone;
+            } catch (error) {
+              state.error = error.message;
+              render();
+            }
+          },
+        }),
+        currentUser.emailVerified ? "Email task reminders" : "Verify email to enable reminders",
+      ]),
       el("a", { class: "download-app-btn", href: APK_DOWNLOAD_URL }, "Download Android app"),
       nav,
     ]),
@@ -312,44 +338,82 @@ function renderSidebar() {
 
 function renderAuth() {
   let submit;
+  const needsEmail = authMode !== "reset";
+  const needsPassword = ["login", "register", "reset"].includes(authMode);
   const email = el("input", { class: "field-input", type: "email", name: "email", autocomplete: "email", required: "required", maxlength: "254", placeholder: "you@example.com" });
-  const password = el("input", {
+  const password = needsPassword ? el("input", {
     class: "field-input", type: "password", name: "password", required: "required",
-    minlength: authMode === "register" ? "12" : undefined, maxlength: "128",
-    autocomplete: authMode === "register" ? "new-password" : "current-password",
-    placeholder: authMode === "register" ? "At least 12 characters" : "Your password"
-  });
+    minlength: authMode === "register" || authMode === "reset" ? "12" : undefined, maxlength: "128",
+    autocomplete: authMode === "register" || authMode === "reset" ? "new-password" : "current-password",
+    placeholder: authMode === "register" || authMode === "reset" ? "At least 12 characters" : "Your password"
+  }) : null;
+  const titles = {
+    login: "Welcome back",
+    register: "Create your account",
+    forgot: "Reset your password",
+    reset: "Choose a new password",
+  };
+  const action = authMode === "register" ? "register"
+    : authMode === "login" ? "login"
+      : authMode === "forgot" ? "forgot-password" : "reset-password";
   const form = el("form", { class: "auth-card", onsubmit: async (event) => {
     event.preventDefault();
     authMessage = "";
+    authMessageIsError = false;
     submit.disabled = true;
     try {
-      const result = await api(`/auth/${authMode === "register" ? "register" : "login"}`, {
-        method: "POST", body: JSON.stringify({ email: email.value, password: password.value })
+      const body = {};
+      if (needsEmail) body.email = email.value;
+      if (needsPassword) body.password = password.value;
+      if (authMode === "register") body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+      if (authMode === "reset") body.token = passwordResetToken;
+      const result = await api(`/auth/${action}`, {
+        method: "POST", body: JSON.stringify(body)
       });
-      currentUser = result.user;
-      password.value = "";
-      await loadDay();
+      if (authMode === "login") {
+        currentUser = result.user;
+        password.value = "";
+        await loadDay();
+      } else if (authMode === "register") {
+        authMode = "login";
+        authMessage = result.message;
+        render();
+      } else if (authMode === "forgot") {
+        authMessage = result.message;
+        render();
+      } else {
+        passwordResetToken = "";
+        authMode = "login";
+        authMessage = result.message;
+        render();
+      }
     } catch (error) {
       authMessage = error.message;
+      authMessageIsError = true;
       render();
     } finally {
       submit.disabled = false;
     }
   } }, [
     el("div", { class: "auth-brand" }, [el("span", {}, "$"), " planner"]),
-    el("h1", { class: "auth-title" }, authMode === "register" ? "Create your account" : "Welcome back"),
+    el("h1", { class: "auth-title" }, titles[authMode]),
     el("p", { class: "auth-copy" }, "Your tasks are private to your account and sync with this server."),
-    authMessage ? el("div", { class: "error-banner" }, authMessage) : null,
-    el("label", { class: "field-label" }, "Email"), email,
-    el("label", { class: "field-label" }, "Password"), password,
-    authMode === "register" ? el("p", { class: "auth-hint" }, "Use at least 12 characters. Passwords are stored as salted Argon2id hashes, never as readable text.") : null,
-    submit = el("button", { class: "primary-btn auth-submit", type: "submit" }, authMode === "register" ? "Create account" : "Sign in"),
+    authMessage ? el("div", { class: authMessageIsError ? "error-banner" : "auth-hint" }, authMessage) : null,
+    needsEmail ? el("label", { class: "field-label" }, "Email") : null,
+    needsEmail ? email : null,
+    needsPassword ? el("label", { class: "field-label" }, "Password") : null,
+    needsPassword ? password : null,
+    authMode === "register" ? el("p", { class: "auth-hint" }, "Use at least 12 characters. We verify your email before enabling sign-in and recovery.") : null,
+    submit = el("button", { class: "primary-btn auth-submit", type: "submit" }, ({ login: "Sign in", register: "Create account", forgot: "Send reset link", reset: "Save new password" })[authMode]),
+    authMode === "login" ? el("button", { class: "auth-switch", type: "button", onclick: () => {
+      authMode = "forgot"; authMessage = ""; authMessageIsError = false; render();
+    } }, "Forgot password?") : null,
     el("button", { class: "auth-switch", type: "button", onclick: () => {
-      authMode = authMode === "register" ? "login" : "register";
+      authMode = authMode === "register" ? "login" : authMode === "login" ? "register" : "login";
       authMessage = "";
+      authMessageIsError = false;
       render();
-    } }, authMode === "register" ? "Already have an account? Sign in" : "New here? Create an account"),
+    } }, authMode === "register" ? "Already have an account? Sign in" : authMode === "login" ? "New here? Create an account" : "Back to sign in"),
     el("a", { class: "download-app-btn auth-download", href: APK_DOWNLOAD_URL }, "Download Android app"),
   ]);
   return el("div", { class: "auth-page" }, form);
@@ -806,6 +870,30 @@ async function render() {
 }
 
 async function initialize() {
+  const hash = window.location.hash;
+  const verifyMatch = hash.match(/^#verify=([^&]+)/);
+  const resetMatch = hash.match(/^#reset=([^&]+)/);
+  if (verifyMatch) {
+    try {
+      const result = await api("/auth/verify-email", {
+        method: "POST", body: JSON.stringify({ token: decodeURIComponent(verifyMatch[1]) }),
+      });
+      authMessage = result.message;
+    } catch (error) {
+      authMessage = error.message;
+      authMessageIsError = true;
+    }
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+    render();
+    return;
+  }
+  if (resetMatch) {
+    passwordResetToken = decodeURIComponent(resetMatch[1]);
+    authMode = "reset";
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+    render();
+    return;
+  }
   try {
     const result = await api("/auth/me");
     currentUser = result.user;

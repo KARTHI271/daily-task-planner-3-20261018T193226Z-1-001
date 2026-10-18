@@ -12,6 +12,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: "32kb" }));
+app.use((req, res, next) => {
+  if (req.body !== undefined && (!req.body || typeof req.body !== "object" || Array.isArray(req.body))) {
+    return res.status(400).json({ error: "Request body must be a JSON object." });
+  }
+  next();
+});
 app.use("/api", (_req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
   next();

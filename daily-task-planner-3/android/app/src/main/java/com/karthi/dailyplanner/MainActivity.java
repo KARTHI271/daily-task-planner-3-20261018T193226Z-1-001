@@ -20,6 +20,18 @@ import android.widget.Toast;
 public class MainActivity extends Activity {
     private WebView webView;
 
+    private boolean isPlannerOrigin(Uri uri) {
+        Uri planner = Uri.parse(BuildConfig.PLANNER_URL);
+        return "https".equalsIgnoreCase(uri.getScheme())
+                && planner.getHost() != null
+                && planner.getHost().equalsIgnoreCase(uri.getHost())
+                && effectivePort(planner) == effectivePort(uri);
+    }
+
+    private int effectivePort(Uri uri) {
+        return uri.getPort() == -1 ? 443 : uri.getPort();
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -38,7 +50,7 @@ public class MainActivity extends Activity {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 String path = uri.getPath() == null ? "" : uri.getPath();
-                if ("rpi.tail92d0d8.ts.net".equalsIgnoreCase(uri.getHost()) && uri.getPort() == 8443) {
+                if (isPlannerOrigin(uri)) {
                     return false;
                 }
                 if (path.endsWith("DailyTaskPlanner.apk")) return false;

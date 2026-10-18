@@ -1,8 +1,9 @@
-# Daily Task Planner (free-tier build)
+# Daily Task Planner
 
-Local-first task planner: Node/Express API + SQLite, static vanilla-JS frontend
-(no build step). Matches the free-tier plan — no email, no cloud services,
-no paid anything.
+Task planner with a Node/Express API, SQLite storage, and a static vanilla-JS
+frontend. Account verification and password reset use Resend; email task
+reminders are optional for each user. A free-tier account supports low-volume
+use.
 
 ```text
 daily-task-planner/
@@ -81,36 +82,67 @@ docker run -p 3000:3000 -v task-data:/app/backend/data daily-task-planner
 
 ## Accounts and public access
 
-The app supports self-service registration and sign-in. Passwords are stored
-as individual salted Argon2id hashes (a one-way password hash, not reversible
-encryption). Sessions use random, HttpOnly, SameSite cookies; production cookies
-are marked Secure. Tasks and recurring rules are scoped to the signed-in user.
-The first account created after upgrading receives any previously unassigned
-single-user tasks and recurring rules.
+The app supports self-service registration, email verification, sign-in, and
+password reset. Passwords are stored as individual salted Argon2id hashes (a
+one-way password hash, not reversible encryption). Reset links are random,
+single-use, expire after 30 minutes, and invalidate all existing sessions.
+Verification links expire after 24 hours. Sessions use random, HttpOnly,
+SameSite cookies; production cookies are marked Secure. Tasks and recurring
+rules are scoped to the signed-in user. The first account created after
+upgrading receives any previously unassigned single-user tasks and recurring
+rules; existing accounts are marked verified during the one-time migration.
 
 Task content remains in the SQLite database without application-level
 encryption at rest. Protect the Pi and its database backups accordingly.
 
 For the Pi deployment, Jenkins maps container port 3000 to host port 3001. To
-make the app reachable over HTTPS through Tailscale Funnel, use a separate
-HTTPS port so the Jenkins webhook Funnel on 443 remains in place:
+make the planner public without requiring visitors to install Tailscale, use a
+Cloudflare Tunnel with a domain managed by Cloudflare. Map a hostname such as
+`planner.example.com` to `http://127.0.0.1:3001`; the tunnel requires no inbound
+router port-forwarding. A temporary Quick Tunnel URL is useful for a demo but
+is not a stable production address. See the
+[Cloudflare Tunnel setup guide](https://developers.cloudflare.com/tunnel/get-started/).
+
+Set `APP_BASE_URL` to that public HTTPS URL. For Android builds, add a
+`PLANNER_PUBLIC_URL` repository variable under **Settings → Secrets and
+variables → Actions → Variables** with the public HTTPS origin (for example,
+`https://planner.example.com`). The workflow rejects a missing, non-HTTPS, or
+Tailscale URL, so it cannot publish a tailnet-only APK. After setting the
+variable and pushing these changes, you can run **Build and publish Android
+APK** manually from the Actions tab to publish a fresh APK release.
+
+### Resend email setup
+
+Create a Resend API key and verify a sender domain in Resend. Set these
+environment values for local Docker Compose in an untracked `.env` file (copy
+`.env.example`):
 
 ```bash
-sudo tailscale funnel --bg --https=8443 3001
-sudo tailscale funnel status
+RESEND_API_KEY=re_...
+EMAIL_FROM="Daily Task Planner <planner@example.com>"
+APP_BASE_URL=https://planner.example.com
 ```
 
-The public app URL is `https://rpi.tail92d0d8.ts.net:8443/`. Anyone with that
-URL can reach the registration page, so create your account promptly after
-deploying and before sharing it. Each registration receives a separate task
-space. Use HTTPS for account sign-in.
+For Jenkins, make sure the Docker Hub credential ID used by the Jenkinsfile is
+`dockerhub-creds`. Add three **Secret text** credentials with these exact IDs:
+`resend-api-key`, `planner-email-from`, and `planner-public-url`. The pipeline
+injects these into the deployed container at runtime; add them before running
+the updated Jenkins pipeline. The app container binds to loopback so only the
+local tunnel can reach it; the pipeline trusts Cloudflare's client-IP header
+for auth throttling. Never commit API keys to Git. Email verification is
+required for new accounts. Password reset responds with the same message
+whether an account exists or not.
+
+Signed-in, verified users can opt in to email task reminders from the sidebar.
+Reminders are sent once per scheduled time and use the account's time zone.
+The email provider is Resend; the API key is only needed by the server.
 
 ## Android app download
 
 The Android app is a small WebView wrapper around the responsive planner. It
 requires internet access and uses the same HTTPS backend and account as the
 website. GitHub Actions builds a debug-signed APK when the Android project or
-frontend changes, then publishes it as the `android-latest` GitHub release. The
+frontend changes, then publishes it as the `android-public-latest` GitHub release. The
 website's **Download Android app** button links directly to that APK. The
 repository must be public for anyone to download the release without signing
 in to GitHub.

@@ -6,6 +6,10 @@ services:
     container_name: daily-task-planner
     ports:
       - "3000:3000"
+    environment:
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      APP_BASE_URL: ${APP_BASE_URL:-}
     volumes:
       - task-data:/app/backend/data
     restart: unless-stopped
