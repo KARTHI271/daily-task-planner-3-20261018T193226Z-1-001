@@ -1,0 +1,98 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        APP_IMAGE = 'daily-task-planner:ci'
+        DOCKERHUB_REPO = 'daily-task-planner'
+        APP_CONTAINER = 'daily-task-planner-ci'
+        APP_VOLUME = 'daily-task-planner-ci-data'
+        APP_PORT = '3001'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Docker image') {
+            steps {
+                sh 'docker build -t "$APP_IMAGE" -f backend/Dockerfile .'
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKERHUB_USER',
+                    passwordVariable: 'DOCKERHUB_TOKEN'
+                )]) {
+                    sh '''
+                        set +x
+                        trap 'docker logout >/dev/null 2>&1 || true' EXIT
+                        IMAGE_REF="$DOCKERHUB_USER/$DOCKERHUB_REPO:$BUILD_NUMBER"
+                        echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USER" --password-stdin
+                        docker tag "$APP_IMAGE" "$IMAGE_REF"
+                        docker tag "$APP_IMAGE" "$DOCKERHUB_USER/$DOCKERHUB_REPO:latest"
+                        docker push "$IMAGE_REF"
+                        docker push "$DOCKERHUB_USER/$DOCKERHUB_REPO:latest"
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy test container') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKERHUB_USER',
+                    passwordVariable: 'DOCKERHUB_TOKEN'
+                )]) {
+                    sh '''
+                        IMAGE_REF="$DOCKERHUB_USER/$DOCKERHUB_REPO:$BUILD_NUMBER"
+                        docker rm -f "$APP_CONTAINER" 2>/dev/null || true
+                        docker run -d \
+                          --name "$APP_CONTAINER" \
+                          --restart unless-stopped \
+                          -p "$APP_PORT:3000" \
+                          -v "$APP_VOLUME:/app/backend/data" \
+                          "$IMAGE_REF"
+                    '''
+                }
+            }
+        }
+
+        stage('Health check') {
+            steps {
+                sh '''
+                    for attempt in $(seq 1 30); do
+                      if curl --fail --silent "http://localhost:$APP_PORT/health"; then
+                        echo
+                        exit 0
+                      fi
+                      sleep 2
+                    done
+                    echo "Health check failed. Container logs:"
+                    docker logs "$APP_CONTAINER"
+                    exit 1
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Test deployment is available on the Jenkins agent at port ${APP_PORT}."
+        }
+        failure {
+            echo 'Pipeline failed. Check the stage logs and the test container logs.'
+        }
+    }
+}
