@@ -23,7 +23,7 @@ pipeline {
 
         stage('Build Docker image') {
             steps {
-                sh 'docker build -t "$APP_IMAGE" -f backend/Dockerfile .'
+                sh 'docker build -t "$APP_IMAGE" -f daily-task-planner-3/backend/Dockerfile daily-task-planner-3'
             }
         }
 
