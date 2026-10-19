@@ -50,6 +50,23 @@ router.get("/", (req, res) => {
     } catch (e) {
       console.error("Error generating tasks for date:", e);
     }
+  } else if (from && to) {
+    try {
+      const [fy, fm, fd] = from.split("-").map(Number);
+      const [ty, tm, td] = to.split("-").map(Number);
+      const startD = new Date(fy, fm - 1, fd);
+      const endD = new Date(ty, tm - 1, td);
+      const diffDays = Math.round((endD - startD) / 86400000);
+      if (diffDays >= 0 && diffDays <= 45) {
+        const cur = new Date(startD);
+        while (cur <= endD) {
+          generateForDate(cur, req.user.id);
+          cur.setDate(cur.getDate() + 1);
+        }
+      }
+    } catch (e) {
+      console.error("Error generating tasks for range:", e);
+    }
   }
 
   let sql = "SELECT * FROM tasks WHERE user_id = @userId";
@@ -145,6 +162,10 @@ router.post("/", (req, res) => {
     snoozedUntil = ""
   } = req.body;
 
+  const sanitizedSubtasks = Array.isArray(subtasks)
+    ? subtasks.filter((item) => item && typeof item.title === "string" && item.title.trim().length > 0)
+    : [];
+
   if (typeof title !== "string" || !title.trim() || title.length > 200 || !validDate(date)) {
     return res.status(400).json({ error: "title and date are required" });
   }
@@ -152,13 +173,13 @@ router.post("/", (req, res) => {
       || typeof notes !== "string" || notes.length > 5000
       || !validTime(startTime) || !validTime(reminderTime)
       || !PRIORITIES.includes(priority) || !CATEGORIES.includes(category) || !STATUSES.includes(status)
-      || !Array.isArray(subtasks) || subtasks.length > 100
-      || subtasks.some((item) => !item || typeof item.title !== "string" || !item.title.trim() || item.title.length > 200)) {
+      || !Array.isArray(sanitizedSubtasks) || sanitizedSubtasks.length > 100
+      || sanitizedSubtasks.some((item) => !item || typeof item.title !== "string" || !item.title.trim() || item.title.length > 200)) {
     return res.status(400).json({ error: "One or more task fields are invalid." });
   }
 
   const timestamp = now();
-  const subtasksJson = typeof subtasks === "string" ? subtasks : JSON.stringify(subtasks || []);
+  const subtasksJson = JSON.stringify(sanitizedSubtasks);
 
   db.prepare(`
     INSERT INTO tasks
@@ -187,6 +208,9 @@ router.put("/:id", (req, res) => {
   const nextReminderTime = next.reminderTime ?? next.reminder_time ?? "";
   let nextSubtasks = req.body.subtasks === undefined ? existing.subtasks || "[]" : req.body.subtasks;
   try { if (typeof nextSubtasks === "string") nextSubtasks = JSON.parse(nextSubtasks); } catch { nextSubtasks = null; }
+  if (Array.isArray(nextSubtasks)) {
+    nextSubtasks = nextSubtasks.filter((item) => item && typeof item.title === "string" && item.title.trim().length > 0);
+  }
   let nextSnoozedUntil = next.snoozedUntil ?? next.snoozed_until ?? "";
   if (nextSnoozedUntil !== "") {
     const parsedSnooze = new Date(nextSnoozedUntil);

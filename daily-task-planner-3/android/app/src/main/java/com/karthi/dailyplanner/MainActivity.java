@@ -66,7 +66,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(16, 23, 32));
+        webView.setBackgroundColor(Color.rgb(11, 15, 23));
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         setContentView(webView);
 

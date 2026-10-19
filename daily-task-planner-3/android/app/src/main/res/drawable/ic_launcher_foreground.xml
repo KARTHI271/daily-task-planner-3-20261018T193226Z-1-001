@@ -3,18 +3,26 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Squircle base -->
     <path
-        android:fillColor="#A7E6C1"
-        android:pathData="M40,23h28c7.7,0 14,6.3 14,14v34c0,7.7 -6.3,14 -14,14h-28c-7.7,0 -14,-6.3 -14,-14v-34c0,-7.7 6.3,-14 14,-14z" />
+        android:fillColor="#6366F1"
+        android:pathData="M34,22h40c6.6,0 12,5.4 12,12v40c0,6.6 -5.4,12 -12,12h-40c-6.6,0 -12,-5.4 -12,-12v-40c0,-6.6 5.4,-12 12,-12z" />
+    <!-- Subtle top bar -->
     <path
-        android:strokeColor="#14241C"
-        android:strokeWidth="4"
+        android:strokeColor="#FFFFFF"
+        android:strokeAlpha="0.4"
+        android:strokeWidth="3"
         android:strokeLineCap="round"
-        android:pathData="M36,43h36M42,19v10M66,19v10" />
+        android:pathData="M36,36h14" />
+    <!-- Dynamic Checkmark -->
     <path
-        android:strokeColor="#14241C"
-        android:strokeWidth="6"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="7"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M38,59l10,10 23,-24" />
+        android:pathData="M36,54l14,14 24,-26" />
+    <!-- Golden Spark -->
+    <path
+        android:fillColor="#FDE047"
+        android:pathData="M73,40m-3,0a3,3 0 1,0 6,0a3,3 0 1,0 -6,0" />
 </vector>

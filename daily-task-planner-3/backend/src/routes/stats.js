@@ -79,6 +79,19 @@ router.get("/", (req, res) => {
 
   let streak = 0;
   const cursor = new Date();
+  const todayKeyStr = dateKey(cursor);
+  const todayList = byDate[todayKeyStr];
+
+  // If today has tasks and all are completed, today counts towards streak
+  if (todayList?.length && todayList.every(t => t.status === "Completed")) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  } else {
+    // If today is in progress or has no tasks yet, start checking from yesterday
+    // so an active streak is preserved during the day
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
   while (true) {
     const list = byDate[dateKey(cursor)];
     if (!list?.length || !list.every(t => t.status === "Completed")) break;

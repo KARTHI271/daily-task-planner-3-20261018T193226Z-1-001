@@ -42,10 +42,14 @@ router.post("/", (req, res) => {
     reminderTime = ""
   } = req.body;
 
+  const sanitizedSubtasks = Array.isArray(subtasks)
+    ? subtasks.filter((item) => item && typeof item.title === "string" && item.title.trim().length > 0)
+    : [];
+
   if (typeof title !== "string" || !title.trim() || title.length > 200 || !validDate(startDate)
       || typeof description !== "string" || description.length > 5000 || !validTime(startTime)
       || !validTime(reminderTime) || !PRIORITIES.includes(priority) || !CATEGORIES.includes(category)
-      || !FREQUENCIES.includes(frequency) || typeof enabled !== "boolean" || !validSubtasks(subtasks)) {
+      || !FREQUENCIES.includes(frequency) || typeof enabled !== "boolean" || !validSubtasks(sanitizedSubtasks)) {
     return res.status(400).json({ error: "title and startDate are required" });
   }
 
@@ -55,7 +59,7 @@ router.post("/", (req, res) => {
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
     id, req.user.id, title.trim(), description, startTime, priority, category,
-    frequency, startDate, enabled ? 1 : 0, JSON.stringify(subtasks), reminderTime
+    frequency, startDate, enabled ? 1 : 0, JSON.stringify(sanitizedSubtasks), reminderTime
   );
 
   res.status(201).json(db.prepare("SELECT * FROM recurring_tasks WHERE id=? AND user_id=?").get(id, req.user.id));
@@ -71,6 +75,9 @@ router.put("/:id", (req, res) => {
   const nextEnabled = next.enabled;
   let nextSubtasks = next.subtasks ?? "[]";
   try { if (typeof nextSubtasks === "string") nextSubtasks = JSON.parse(nextSubtasks); } catch { nextSubtasks = null; }
+  if (Array.isArray(nextSubtasks)) {
+    nextSubtasks = nextSubtasks.filter((item) => item && typeof item.title === "string" && item.title.trim().length > 0);
+  }
   const nextReminderTime = next.reminderTime ?? next.reminder_time ?? "";
   if (typeof next.title !== "string" || !next.title.trim() || next.title.length > 200
       || typeof (next.description ?? "") !== "string" || (next.description ?? "").length > 5000
