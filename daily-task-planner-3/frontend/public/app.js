@@ -414,7 +414,7 @@ function renderAuth() {
       submit.disabled = false;
     }
   } }, [
-    el("div", { class: "auth-brand" }, [el("span", {}, "$"), " planner"]),
+    el("div", { class: "auth-brand" }, [el("span", { class: "brand-mark" }, icon("check", 15, { strokeWidth: 3 })), " Daily Planner"]),
     el("h1", { class: "auth-title" }, titles[authMode]),
     el("p", { class: "auth-copy" }, "Your tasks are private to your account and sync with this server."),
     authMessage ? el("div", { class: authMessageIsError ? "error-banner" : "auth-hint" }, authMessage) : null,
