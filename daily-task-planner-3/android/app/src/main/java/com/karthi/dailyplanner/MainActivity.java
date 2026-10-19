@@ -10,12 +10,14 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
 import android.os.Environment;
+import android.graphics.Color;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.view.View;
 import android.widget.Toast;
 import java.util.Locale;
 
@@ -64,6 +66,8 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         webView = new WebView(this);
+        webView.setBackgroundColor(Color.rgb(16, 23, 32));
+        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         setContentView(webView);
 
         webView.getSettings().setJavaScriptEnabled(true);
@@ -74,6 +78,16 @@ public class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptCookie(true);
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                if (isPlannerOrigin(Uri.parse(url))) {
+                    view.evaluateJavascript(
+                            "document.documentElement.classList.add('native-app');" +
+                                    "if (document.body) document.body.classList.add('native-app');",
+                            null);
+                }
+            }
+
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return handleUrlLoading(view, request.getUrl());

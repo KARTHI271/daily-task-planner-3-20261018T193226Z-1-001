@@ -31,6 +31,7 @@ let state = {
   // Expansion & Snooze UI
   expandedTasks: new Set(),
   activeSnoozeTaskId: null,
+  showAccountMenu: false,
 };
 let currentUser = null;
 let authMode = "login";
@@ -280,50 +281,68 @@ function renderSidebar() {
     ["stats", "Stats", "barChart"],
   ];
   const nav = el("div", { class: "nav" }, navItems.map(([k, label, iconName]) => el("button", {
+    "aria-label": label,
     class: state.view === k ? "active" : "",
     onclick: () => { state.view = k; render(); },
   }, [icon(iconName, 20), el("span", {}, label)])));
 
-  return el("aside", { class: "sidebar" }, [
-    el("div", {}, [
-      el("div", { class: "logo" }, [el("span", {}, "$"), " planner"]),
-      el("div", { class: "account-panel" }, [
-        el("div", { class: "account-email" }, currentUser.email),
-        el("button", { class: "account-action", onclick: async () => {
-          await api("/auth/logout", { method: "POST" });
-          currentUser = null;
-          state.dayTasks = [];
-          state.overdueTasks = [];
+  const signOut = el("button", { class: "account-action", onclick: async () => {
+    await api("/auth/logout", { method: "POST" });
+    currentUser = null;
+    state.dayTasks = [];
+    state.overdueTasks = [];
+    state.showAccountMenu = false;
+    render();
+  } }, "Sign out");
+
+  const reminderSetting = el("label", { class: "email-reminder-setting" }, [
+    el("input", {
+      type: "checkbox",
+      checked: currentUser.emailRemindersEnabled,
+      disabled: !currentUser.emailVerified,
+      onchange: async (event) => {
+        try {
+          const result = await api("/auth/preferences", {
+            method: "PUT",
+            body: JSON.stringify({
+              emailRemindersEnabled: event.target.checked,
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+            }),
+          });
+          currentUser.emailRemindersEnabled = result.emailRemindersEnabled;
+          currentUser.timezone = result.timezone;
+        } catch (error) {
+          state.error = error.message;
           render();
-        } }, "Sign out"),
-      ]),
-      el("label", { class: "email-reminder-setting", style: "display:flex;align-items:center;gap:8px;font-size:12px;color:#8B93A1;margin:12px 0" }, [
-        el("input", {
-          type: "checkbox",
-          checked: currentUser.emailRemindersEnabled,
-          disabled: !currentUser.emailVerified,
-          onchange: async (event) => {
-            try {
-              const result = await api("/auth/preferences", {
-                method: "PUT",
-                body: JSON.stringify({
-                  emailRemindersEnabled: event.target.checked,
-                  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-                }),
-              });
-              currentUser.emailRemindersEnabled = result.emailRemindersEnabled;
-              currentUser.timezone = result.timezone;
-            } catch (error) {
-              state.error = error.message;
-              render();
-            }
-          },
-        }),
-        currentUser.emailVerified ? "Email task reminders" : "Verify email to enable reminders",
-      ]),
+        }
+      },
+    }),
+    currentUser.emailVerified ? "Email task reminders" : "Verify email to enable reminders",
+  ]);
+
+  const profileInitial = (currentUser.email || "U").trim().charAt(0).toUpperCase();
+  const accountMenu = el("div", { class: `account-menu ${state.showAccountMenu ? "open" : ""}` }, [
+    el("button", {
+      class: "profile-trigger",
+      type: "button",
+      "aria-label": "Account settings",
+      "aria-expanded": String(state.showAccountMenu),
+      onclick: () => { state.showAccountMenu = !state.showAccountMenu; render(); },
+    }, profileInitial),
+    el("div", { class: "account-details" }, [
+      el("div", { class: "account-email" }, currentUser.email),
+      reminderSetting,
       el("a", { class: "download-app-btn", href: APK_DOWNLOAD_URL }, "Download Android app"),
-      nav,
+      signOut,
     ]),
+  ]);
+
+  return el("aside", { class: "sidebar" }, [
+    el("div", { class: "sidebar-top" }, [
+      el("div", { class: "logo" }, [el("span", { class: "brand-mark" }, icon("check", 15, { strokeWidth: 3 })), " Daily Planner"]),
+      accountMenu,
+    ]),
+    nav,
     el("div", { class: "sidebar-stats" }, [
       el("div", { class: "mono", style: "font-size:13px;color:#6B7280" }, toKey(state.selectedDate)),
       el("div", { style: "display:flex;align-items:baseline;gap:6px;margin-top:6px" }, [
@@ -602,6 +621,17 @@ function renderDayView() {
   const body = [];
   const overdueBanner = renderOverdueBanner();
   if (overdueBanner) body.push(overdueBanner);
+
+  const completedCount = state.dayTasks.filter((task) => task.status === "Completed").length;
+  const completionPct = state.dayTasks.length ? Math.round((completedCount / state.dayTasks.length) * 100) : 0;
+  body.push(el("section", { class: "mobile-overview", "aria-label": "Today's progress" }, [
+    el("div", { class: "overview-copy" }, [
+      el("span", { class: "overview-kicker" }, "YOUR DAILY FOCUS"),
+      el("strong", { class: "overview-count" }, `${completedCount} of ${state.dayTasks.length} complete`),
+    ]),
+    el("span", { class: "overview-percent" }, `${completionPct}%`),
+    el("div", { class: "overview-track" }, el("div", { class: "overview-fill", style: `width:${completionPct}%` })),
+  ]));
 
   body.push(renderFilterSortBar());
 
