@@ -1,5 +1,4 @@
 const crypto = require("crypto");
-const net = require("net");
 const express = require("express");
 const db = require("../db");
 const {
@@ -13,21 +12,42 @@ const attempts = new Map();
 const now = () => new Date().toISOString();
 const GENERIC_RESET_MESSAGE = "If that address belongs to a verified account, a password reset email will arrive shortly.";
 const GENERIC_VERIFY_MESSAGE = "If we can create or verify the account, a verification email will arrive shortly.";
+const AUTH_WINDOW_MS = 60_000;
+const PEER_ATTEMPT_LIMIT = 120;
+const IDENTITY_ATTEMPT_LIMIT = 10;
 
 function limitAuthAttempts(req, res, next) {
-  const cfIp = process.env.TRUST_CF_CONNECTING_IP === "true" ? req.get("cf-connecting-ip") : "";
-  const key = cfIp && net.isIP(cfIp) ? cfIp : (req.ip || req.socket.remoteAddress || "unknown");
   const currentTime = Date.now();
-  const record = attempts.get(key);
-  if (!record || currentTime - record.startedAt > 60_000) {
-    attempts.set(key, { startedAt: currentTime, count: 1 });
-  } else if (record.count >= 10) {
-    return res.status(429).json({ error: "Too many attempts. Wait a minute and try again." });
-  } else {
-    record.count += 1;
+  const peer = req.ip || req.socket.remoteAddress || "unknown";
+  const keys = [{ key: `peer:${peer}`, limit: PEER_ATTEMPT_LIMIT }];
+  const email = normalizeEmail(req.body?.email);
+  const token = req.body?.token;
+  if (validEmail(email)) {
+    keys.push({ key: `email:${crypto.createHash("sha256").update(email).digest("hex")}`, limit: IDENTITY_ATTEMPT_LIMIT });
+  } else if (typeof token === "string" && token.length >= 32 && token.length <= 128) {
+    keys.push({ key: `token:${tokenHash(token)}`, limit: IDENTITY_ATTEMPT_LIMIT });
   }
-  if (attempts.size > 100) {
-    for (const [ip, entry] of attempts) if (currentTime - entry.startedAt > 60_000) attempts.delete(ip);
+
+  for (const { key, limit } of keys) {
+    const record = attempts.get(key);
+    if (record && currentTime - record.startedAt <= AUTH_WINDOW_MS && record.count >= limit) {
+      return res.status(429).json({ error: "Too many attempts. Wait a minute and try again." });
+    }
+  }
+  for (const { key } of keys) {
+    const record = attempts.get(key);
+    if (!record || currentTime - record.startedAt > AUTH_WINDOW_MS) {
+      attempts.set(key, { startedAt: currentTime, count: 1 });
+    } else {
+      record.count += 1;
+    }
+  }
+
+  if (attempts.size > 1000) {
+    for (const [key, entry] of attempts) {
+      if (currentTime - entry.startedAt > AUTH_WINDOW_MS) attempts.delete(key);
+    }
+    while (attempts.size > 10_000) attempts.delete(attempts.keys().next().value);
   }
   next();
 }

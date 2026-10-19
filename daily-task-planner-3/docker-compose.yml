@@ -7,6 +7,7 @@ services:
     ports:
       - "3000:3000"
     environment:
+      DATA_DIR: ${DATA_DIR:-./data}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_APP_PASSWORD: ${SMTP_APP_PASSWORD:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
