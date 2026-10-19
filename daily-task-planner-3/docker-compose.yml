@@ -7,7 +7,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_APP_PASSWORD: ${SMTP_APP_PASSWORD:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
       APP_BASE_URL: ${APP_BASE_URL:-}
     volumes:

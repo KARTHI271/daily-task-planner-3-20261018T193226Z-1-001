@@ -1,11 +1,12 @@
-const RESEND_ENDPOINT = "https://api.resend.com/emails";
+const nodemailer = require("nodemailer");
 
 function config() {
-  const apiKey = process.env.RESEND_API_KEY;
+  const user = process.env.SMTP_USER;
+  const password = process.env.SMTP_APP_PASSWORD;
   const from = process.env.EMAIL_FROM;
   const appUrl = process.env.APP_BASE_URL;
-  if (!apiKey || !from || !appUrl) {
-    throw new Error("Email is not configured. Set RESEND_API_KEY, EMAIL_FROM, and APP_BASE_URL.");
+  if (!user || !password || !from || !appUrl) {
+    throw new Error("Email is not configured. Set SMTP_USER, SMTP_APP_PASSWORD, EMAIL_FROM, and APP_BASE_URL.");
   }
 
   const parsedUrl = new URL(appUrl);
@@ -16,23 +17,28 @@ function config() {
   if (process.env.NODE_ENV === "production" && parsedUrl.protocol !== "https:") {
     throw new Error("APP_BASE_URL must use HTTPS in production.");
   }
-  return { apiKey, from, appUrl: parsedUrl.origin };
+  return { user, password: password.replace(/\s/g, ""), from, appUrl: parsedUrl.origin };
 }
 
 async function sendEmail({ to, subject, html, text }) {
-  const { apiKey, from } = config();
-  const response = await fetch(RESEND_ENDPOINT, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ from, to: [to], subject, html, text }),
-    signal: AbortSignal.timeout(10_000),
+  const { user, password, from } = config();
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: { user, pass: password },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
   });
-  if (!response.ok) {
-    console.error(`Resend request failed with HTTP ${response.status}.`);
+
+  try {
+    await transporter.sendMail({ from, to, subject, text, html });
+  } catch (error) {
+    console.error(`Gmail SMTP request failed: ${error.code || "SMTP_ERROR"}`);
     throw new Error("Email provider rejected the message.");
+  } finally {
+    transporter.close();
   }
   return true;
 }

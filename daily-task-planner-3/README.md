@@ -1,7 +1,7 @@
 # Daily Task Planner
 
 Task planner with a Node/Express API, SQLite storage, and a static vanilla-JS
-frontend. Account verification and password reset use Resend; email task
+frontend. Account verification and password reset use Gmail SMTP; email task
 reminders are optional for each user. A free-tier account supports low-volume
 use.
 
@@ -116,31 +116,39 @@ The Funnel status currently also shows the default HTTPS address forwarding
 `/github-webhook/` to Jenkins. Keep the Jenkins UI protected; only the webhook
 endpoint needs public access for GitHub delivery.
 
-### Resend email setup
+### Gmail SMTP email setup
 
-Create a Resend API key and verify a sender domain in Resend. Set these
-environment values for local Docker Compose in an untracked `.env` file (copy
-`.env.example`):
+For a low-volume personal project, the app sends account verification,
+password-reset, and reminder emails through Gmail SMTP. Enable 2-Step
+Verification on the Gmail account, then create an App Password in Google
+Account security settings. Google requires 2-Step Verification for App
+Passwords; keep the generated password private and revoke it when no longer
+needed.
 
 ```bash
-RESEND_API_KEY=re_...
-EMAIL_FROM="Daily Task Planner <planner@example.com>"
-APP_BASE_URL=https://planner.example.com
+SMTP_USER=your-gmail-address@gmail.com
+SMTP_APP_PASSWORD=your-app-password
+EMAIL_FROM="Daily Task Planner <your-gmail-address@gmail.com>"
+APP_BASE_URL=https://rpi.tail92d0d8.ts.net:8443
 ```
 
 For Jenkins, make sure the Docker Hub credential ID used by the Jenkinsfile is
-`dockerhub-creds`. Add three **Secret text** credentials with these exact IDs:
-`resend-api-key`, `planner-email-from`, and `planner-public-url`. The pipeline
-injects these into the deployed container at runtime; add them before running
-the updated Jenkins pipeline. The app container binds to loopback so only the
-local tunnel can reach it; the pipeline trusts Cloudflare's client-IP header
-for auth throttling. Never commit API keys to Git. Email verification is
-required for new accounts. Password reset responds with the same message
-whether an account exists or not.
+`dockerhub-creds`. Add **Secret text** credentials with these exact IDs:
+`gmail-smtp-user` (your full Gmail address), `gmail-app-password` (the
+generated App Password), `planner-email-from` (for example, `Daily Task Planner
+<your-gmail-address@gmail.com>`), and `planner-public-url`. The pipeline
+injects these into the deployed container at runtime. Never commit the App
+Password to Git or put it in the Android app. The app container binds to
+loopback so only the local tunnel can reach it. Email verification is required
+for new accounts. Password reset responds with the same message whether an
+account exists or not.
 
 Signed-in, verified users can opt in to email task reminders from the sidebar.
 Reminders are sent once per scheduled time and use the account's time zone.
-The email provider is Resend; the API key is only needed by the server.
+The app connects to Gmail over TLS SMTP on port 465. Use a dedicated Gmail
+account for the app if possible; Google may impose sending limits or block
+unusual activity, so this is suitable for low-volume learning and personal use,
+not bulk mail.
 
 ## Android app download
 

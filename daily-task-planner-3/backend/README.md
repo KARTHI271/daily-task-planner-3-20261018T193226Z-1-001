@@ -16,13 +16,18 @@ the port.
 
 ## Email configuration
 
-Registration verification, password reset, and opt-in task reminders use the
-Resend email API. Configure these environment variables in the runtime:
+Registration verification, password reset, and opt-in task reminders use
+Gmail SMTP. Configure these environment variables in the runtime:
 
-- `RESEND_API_KEY`: Resend API key; keep it out of Git.
-- `EMAIL_FROM`: sender address on a domain verified in Resend.
+- `SMTP_USER`: full Gmail address used to authenticate.
+- `SMTP_APP_PASSWORD`: Google App Password; keep it out of Git.
+- `EMAIL_FROM`: sender display name and the same Gmail address, for example
+  `Daily Task Planner <planner@gmail.com>`.
 - `APP_BASE_URL`: public HTTPS origin used to create verification and reset
-  links (for example, `https://planner.example.com`).
+  links (for example, `https://rpi.tail92d0d8.ts.net:8443`).
+
+Gmail App Passwords require 2-Step Verification. The mailer uses TLS to
+`smtp.gmail.com:465`; use it for low-volume app mail, not bulk sending.
 
 Email reminders are disabled by default. A verified account can enable them in
 the app sidebar. Reminder delivery uses the account's IANA time zone and sends
